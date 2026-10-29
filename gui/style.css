@@ -1,0 +1,8 @@
+.sidebar button { padding: 12px 14px; }
+.selected-nav { background: alpha(@accent_color, .18); color: @accent_color; }
+window { font-family: sans-serif; }
+textview { border-radius: 10px; }
+button { border-radius: 8px; }
+.rgb-channel { padding: 4px; border-radius: 8px; background: alpha(@window_fg_color, .04); }
+.rgb-channel button { padding: 4px; min-width: 24px; min-height: 20px; }
+.rgb-selected { background: alpha(@accent_color, .18); outline: 1px solid alpha(@accent_color, .6); }

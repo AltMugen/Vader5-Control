@@ -1,0 +1,10 @@
+# Give the active user access to the USB device for the Xbox rumble endpoint.
+ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="37d7", ATTR{idProduct}=="2401", TAG+="uaccess"
+
+# SDL reads the extended controls and gyro from the HID interface.
+KERNEL=="hidraw*", ATTRS{idVendor}=="37d7", ATTRS{idProduct}=="2401", MODE="0660", TAG+="uaccess"
+
+# Keep xpad off interface 0 so it does not create a second controller.
+ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_interface", \
+  ATTR{bInterfaceNumber}=="00", ATTRS{idVendor}=="37d7", ATTRS{idProduct}=="2401", \
+  RUN+="/bin/sh -c 'for i in $(seq 1 8); do [ -e /sys/bus/usb/drivers/xpad/%k ] && echo -n %k > /sys/bus/usb/drivers/xpad/unbind && exit 0; sleep 0.3; done'"

@@ -1,0 +1,155 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+RULE=/etc/udev/rules.d/60-vader5-sdl.rules
+DRIVER_DIR="${VADER5_DRIVER_DIR:-$HOME/.local/share/vader5-driver/sdl}"
+STEAM_DIR="${VADER5_STEAM_DIR:-$HOME/.local/share/Steam}"
+
+IS_RU=false
+if [[ "${LANG:-}" =~ ^ru || "${LC_ALL:-}" =~ ^ru || "${LC_MESSAGES:-}" =~ ^ru ]]; then
+    IS_RU=true
+fi
+
+reload_udev() {
+    if [[ -f "$DRIVER_DIR/60-vader5-sdl.rules" ]] && ! cmp -s "$DRIVER_DIR/60-vader5-sdl.rules" "$RULE"; then
+        sudo install -m 0644 "$DRIVER_DIR/60-vader5-sdl.rules" "$RULE"
+    fi
+    sudo udevadm control --reload-rules
+    local usb
+    for usb in /sys/bus/usb/devices/*; do
+        [[ -f "$usb/idVendor" && -f "$usb/idProduct" ]] || continue
+        if [[ "$(cat "$usb/idVendor")" == 37d7 && "$(cat "$usb/idProduct")" == 2401 ]]; then
+            sudo udevadm trigger --action=add "$usb"
+        fi
+    done
+    local interface parent
+    for interface in /sys/bus/usb/drivers/xpad/*:1.0; do
+        [[ -L "$interface" ]] || continue
+        parent=$(dirname "$(readlink -f "$interface")")
+        if [[ "$(cat "$parent/idVendor" 2>/dev/null)" == 37d7 && "$(cat "$parent/idProduct" 2>/dev/null)" == 2401 ]]; then
+            printf '%s' "${interface##*/}" | sudo tee /sys/bus/usb/drivers/xpad/unbind >/dev/null
+        fi
+    done
+}
+
+patch_sdl() {
+    if [[ "$IS_RU" == true ]]; then
+        echo "📦 Обновление библиотек SDL3 в Steam..."
+    else
+        echo "📦 Updating SDL3 libraries in Steam..."
+    fi
+    if [[ ! -d "$DRIVER_DIR" ]]; then
+        if [[ "$IS_RU" == true ]]; then
+            echo "❌ Ошибка: папка с собранным драйвером $DRIVER_DIR не найдена!"
+        else
+            echo "❌ Error: driver directory $DRIVER_DIR not found!"
+        fi
+        exit 1
+    fi
+    if pgrep -x steamwebhelper >/dev/null || pgrep -x steam >/dev/null; then
+        if [[ "$IS_RU" == true ]]; then
+            echo "❌ Ошибка: полностью закройте Steam перед обновлением SDL3."
+        else
+            echo "❌ Error: close Steam completely before updating SDL3."
+        fi
+        exit 1
+    fi
+
+    python3 "$DRIVER_DIR/configure-steam.py" "$DRIVER_DIR" "$STEAM_DIR"
+
+    if [[ "$IS_RU" == true ]]; then
+        echo "✅ Готово! Патч применён."
+    else
+        echo "✅ Done! Patch applied."
+    fi
+}
+
+mode_native() {
+    if [[ "$IS_RU" == true ]]; then
+        echo "🎮 Переключаемся в STEAM NATIVE..."
+    else
+        echo "🎮 Switching to STEAM NATIVE..."
+    fi
+    [[ -f "$RULE" ]] || {
+        if [[ "$IS_RU" == true ]]; then echo "❌ Не найдено $RULE. Запустите ./install.sh"; else echo "❌ Missing $RULE. Run ./install.sh"; fi
+        exit 1
+    }
+    systemctl --user disable --now padctl 2>/dev/null || true
+    reload_udev
+    systemctl --user --quiet enable --now vader5-rumble
+    if [[ "$IS_RU" == true ]]; then
+        echo "✅ Режим STEAM NATIVE активен. Вытащи и вставь USB-донгл."
+    else
+        echo "✅ STEAM NATIVE mode active. Unplug and replug the USB dongle."
+    fi
+}
+
+mode_padctl() {
+    if [[ "$IS_RU" == true ]]; then
+        echo "🕹️ Переключаемся в PADCTL (Виртуальный Xbox Elite)..."
+    else
+        echo "🕹️ Switching to PADCTL (Virtual Xbox Elite)..."
+    fi
+    systemctl --user disable --now vader5-rumble 2>/dev/null || true
+    reload_udev
+    systemctl --user --quiet enable --now padctl
+    if [[ "$IS_RU" == true ]]; then
+        echo "✅ Режим PADCTL активен. Вытащи и вставь USB-донгл."
+    else
+        echo "✅ PADCTL mode active. Unplug and replug the USB dongle."
+    fi
+}
+
+start_bluetooth() {
+    local config="${XDG_CONFIG_HOME:-$HOME/.config}/vader5/bluetooth" device="${2:-}" adapter="${3:-}"
+    if pgrep -u "$UID" -x steam >/dev/null || pgrep -u "$UID" -x steamwebhelper >/dev/null; then
+        if [[ "$IS_RU" == true ]]; then echo '❌ Сначала полностью закройте Steam.'; else echo '❌ Close Steam completely first.'; fi
+        return 1
+    fi
+    local discover=false
+    if [[ "$device" == --scan ]]; then device=""; adapter=""; discover=true; fi
+    if [[ -z "$device" && -f "$config" && "$discover" == false ]]; then
+        { read -r device || true; read -r adapter || true; } < "$config"
+    fi
+    if [[ -z "$device" ]]; then
+        local found
+        found=$(python3 "$DRIVER_DIR/discover-bluetooth.py") || return 1
+        { read -r device; read -r adapter; } <<< "$found"
+    elif [[ -z "$adapter" ]]; then
+        adapter=$(python3 "$DRIVER_DIR/discover-bluetooth.py" --adapter-only) || return 1
+    fi
+    if [[ ! "$device" =~ ^([[:xdigit:]]{2}:){5}[[:xdigit:]]{2}$ || ! "$adapter" =~ ^([[:xdigit:]]{2}:){5}[[:xdigit:]]{2}$ ]]; then
+        if [[ "$IS_RU" == true ]]; then echo 'Использование: vader5 bluetooth MAC-геймпада [MAC-адаптера]'; else echo 'Usage: vader5 bluetooth CONTROLLER-MAC [ADAPTER-MAC]'; fi
+        return 1
+    fi
+    mkdir -p "$(dirname "$config")"
+    (umask 077; printf '%s\n%s\n' "$device" "$adapter" > "$config")
+    if [[ "$IS_RU" == true ]]; then echo '🎮 Запускаю Steam с Bluetooth Flashplay...'; else echo '🎮 Starting Steam with Bluetooth Flashplay...'; fi
+    "$HOME/.local/bin/steam"
+}
+
+show_status() {
+    if systemctl --user is-active --quiet padctl 2>/dev/null; then
+        if [[ "$IS_RU" == true ]]; then echo "Текущий режим: 🕹️ PADCTL (Виртуальный Xbox Elite)"; else echo "Current mode: 🕹️ PADCTL (Virtual Xbox Elite)"; fi
+    else
+        if [[ "$IS_RU" == true ]]; then echo "Текущий режим: 🎮 STEAM NATIVE (Пропатченный SDL3)"; else echo "Current mode: 🎮 STEAM NATIVE (Patched SDL3)"; fi
+    fi
+}
+
+case "${1:-status}" in
+    n|native) mode_native ;;
+    p|padctl) mode_padctl ;;
+    u|update) patch_sdl ;;
+    b|bluetooth) start_bluetooth "$@" ;;
+    s|status) show_status ;;
+    *)
+        if [[ "$IS_RU" == true ]]; then
+            echo "Использование: vader5 [native|padctl|update|status|bluetooth]"
+            echo "               vader5 [n|p|u|s|b]"
+        else
+            echo "Usage: vader5 [native|padctl|update|status|bluetooth]"
+            echo "       vader5 [n|p|u|s|b]"
+        fi
+        show_status
+        ;;
+esac

@@ -1,0 +1,143 @@
+diff --git a/src/joystick/hidapi/SDL_hidapi_flydigi.c b/src/joystick/hidapi/SDL_hidapi_flydigi.c
+index a4958f6..746f259 100644
+--- a/src/joystick/hidapi/SDL_hidapi_flydigi.c
++++ b/src/joystick/hidapi/SDL_hidapi_flydigi.c
+@@ -27,6 +27,14 @@
+ #include "SDL_hidapi_rumble.h"
+ #include "SDL_hidapi_flydigi.h"
+
++#ifdef SDL_PLATFORM_LINUX
++#include <stddef.h>
++#include <sys/socket.h>
++#include <sys/un.h>
++#include <unistd.h>
++#include <stdio.h>
++#endif
++
+ #ifdef SDL_JOYSTICK_HIDAPI_FLYDIGI
+
+ // Define this if you want to log all packets from the controller
+@@ -78,6 +86,7 @@ enum
+ #define FLYDIGI_V2_SET_STATUS_COMMAND   0x11
+ #define FLYDIGI_V2_HAPTIC_COMMAND       0x12
+ #define FLYDIGI_V2_ACQUIRE_CONTROLLER_COMMAND 0x1C
++#define FLYDIGI_V2_RAW_PACKET_SIZE 32
+ #define FLYDIGI_V2_INPUT_REPORT         0xEF
+
+ typedef struct
+@@ -358,6 +367,26 @@ static bool HIDAPI_DriverFlydigi_InitControllerV1(SDL_HIDAPI_Device *device)
+     return true;
+ }
+
++static bool SDL_HIDAPI_Flydigi_UsesUnnumbered32ByteReports(SDL_HIDAPI_Device *device)
++{
++    return device->vendor_id == USB_VENDOR_FLYDIGI_V2 && device->interface_number == 1;
++}
++
++static int SDL_HIDAPI_Flydigi_WritePacket(SDL_HIDAPI_Device *device, const Uint8 *packet, size_t size)
++{
++    if (SDL_HIDAPI_Flydigi_UsesUnnumbered32ByteReports(device)) {
++        Uint8 raw_packet[FLYDIGI_V2_RAW_PACKET_SIZE + 1];
++        SDL_zeroa(raw_packet);
++        if (size > 0 && packet[0] == FLYDIGI_V2_CMD_REPORT_ID) {
++            ++packet;
++            --size;
++        }
++        SDL_memcpy(&raw_packet[1], packet, SDL_min(size, (size_t)FLYDIGI_V2_RAW_PACKET_SIZE));
++        return SDL_hid_write(device->dev, raw_packet, sizeof(raw_packet));
++    }
++    return SDL_hid_write(device->dev, packet, size);
++}
++
+ static bool GetReply(SDL_HIDAPI_Device* device, Uint8 command, Uint8* data, size_t length)
+ {
+     for (int i = 0; i < 100; ++i) {
+@@ -399,7 +428,7 @@ static bool SDL_HIDAPI_Flydigi_SendInfoRequest(SDL_HIDAPI_Device *device)
+         2,
+         0
+     };
+-    if (SDL_hid_write(device->dev, cmd, sizeof(cmd)) < 0) {
++    if (SDL_HIDAPI_Flydigi_WritePacket(device, cmd, sizeof(cmd)) < 0) {
+         return SDL_SetError("Couldn't query controller info");
+     }
+     return true;
+@@ -441,7 +470,7 @@ static bool SDL_HIDAPI_Flydigi_SendStatusRequest(SDL_HIDAPI_Device *device)
+         FLYDIGI_V2_MAGIC2,
+         FLYDIGI_V2_GET_STATUS_COMMAND
+     };
+-    if (SDL_hid_write(device->dev, cmd, sizeof(cmd)) < 0) {
++    if (SDL_HIDAPI_Flydigi_WritePacket(device, cmd, sizeof(cmd)) < 0) {
+         return SDL_SetError("Couldn't query controller status");
+     }
+     return true;
+@@ -469,7 +498,7 @@ static bool SDL_HIDAPI_Flydigi_SendAcquireRequest(SDL_HIDAPI_Device *device, boo
+         'S', 'D', 'L', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+     };
+
+-    if (SDL_hid_write(device->dev, cmd, sizeof(cmd)) < 0) {
++    if (SDL_HIDAPI_Flydigi_WritePacket(device, cmd, sizeof(cmd)) < 0) {
+         return SDL_SetError("Couldn't send acquire command");
+     }
+     return true;
+@@ -598,26 +627,45 @@ static bool HIDAPI_DriverFlydigi_OpenJoystick(SDL_HIDAPI_Device *device, SDL_Joy
+     return true;
+ }
+
++// Steam uses the extended HID interface for input. Send motor commands to the
++// separate Xbox endpoint through the local user service; never block input here.
++static bool SDL_HIDAPI_Flydigi_SendXboxRumble(Uint8 low, Uint8 high)
++{
++#ifdef SDL_PLATFORM_LINUX
++    struct sockaddr_un addr;
++    SDL_zero(addr);
++    addr.sun_family = AF_UNIX;
++    int name_length = SDL_snprintf(addr.sun_path + 1, sizeof(addr.sun_path) - 1,
++                                   "vader5-rumble-%lu", (unsigned long)getuid());
++    if (name_length < 0 || name_length >= (int)sizeof(addr.sun_path) - 1) {
++        return SDL_SetError("Rumble socket name is too long");
++    }
++    socklen_t addr_length = offsetof(struct sockaddr_un, sun_path) + 1 + name_length;
++    int fd = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
++    if (fd < 0) return SDL_SetError("Could not create rumble socket");
++    Uint8 motors[2] = {low, high};
++    int sent = sendto(fd, motors, sizeof(motors), MSG_DONTWAIT, (struct sockaddr *)&addr, addr_length);
++    close(fd);
++    if (sent != sizeof(motors)) return SDL_SetError("Xbox rumble bridge is unavailable");
++    return true;
++#else
++    return SDL_Unsupported();
++#endif
++}
++
+ static bool HIDAPI_DriverFlydigi_RumbleJoystick(SDL_HIDAPI_Device *device, SDL_Joystick *joystick, Uint16 low_frequency_rumble, Uint16 high_frequency_rumble)
+ {
++    Uint8 low = low_frequency_rumble >> 8;
++    Uint8 high = high_frequency_rumble >> 8;
++    if (device->vendor_id == USB_VENDOR_FLYDIGI_V2 && device->product_id == USB_PRODUCT_FLYDIGI_V2_VADER) {
++        return SDL_HIDAPI_Flydigi_SendXboxRumble(low, high);
++    }
+     if (device->vendor_id == USB_VENDOR_FLYDIGI_V1) {
+-        Uint8 rumble_packet[] = { FLYDIGI_V1_CMD_REPORT_ID, FLYDIGI_V1_HAPTIC_COMMAND, 0x00, 0x00 };
+-        rumble_packet[2] = low_frequency_rumble >> 8;
+-        rumble_packet[3] = high_frequency_rumble >> 8;
+-
+-        if (SDL_HIDAPI_SendRumble(device, rumble_packet, sizeof(rumble_packet)) != sizeof(rumble_packet)) {
+-            return SDL_SetError("Couldn't send rumble packet");
+-        }
+-    } else {
+-        Uint8 rumble_packet[] = { FLYDIGI_V2_CMD_REPORT_ID, FLYDIGI_V2_MAGIC1, FLYDIGI_V2_MAGIC2, FLYDIGI_V2_HAPTIC_COMMAND, 6, 0, 0, 0, 0, 0 };
+-        rumble_packet[5] = low_frequency_rumble >> 8;
+-        rumble_packet[6] = high_frequency_rumble >> 8;
+-
+-        if (SDL_HIDAPI_SendRumble(device, rumble_packet, sizeof(rumble_packet)) != sizeof(rumble_packet)) {
+-            return SDL_SetError("Couldn't send rumble packet");
+-        }
++        Uint8 packet[] = { FLYDIGI_V1_CMD_REPORT_ID, FLYDIGI_V1_HAPTIC_COMMAND, low, high };
++        return SDL_HIDAPI_SendRumble(device, packet, sizeof(packet)) == sizeof(packet) || SDL_SetError("Couldn't send rumble packet");
+     }
+-    return true;
++    Uint8 packet[] = { FLYDIGI_V2_CMD_REPORT_ID, FLYDIGI_V2_MAGIC1, FLYDIGI_V2_MAGIC2, FLYDIGI_V2_HAPTIC_COMMAND, 6, low, high, 0, 0, 0 };
++    return SDL_HIDAPI_SendRumble(device, packet, sizeof(packet)) == sizeof(packet) || SDL_SetError("Couldn't send rumble packet");
+ }
+
+ static bool HIDAPI_DriverFlydigi_RumbleJoystickTriggers(SDL_HIDAPI_Device *device, SDL_Joystick *joystick, Uint16 left_rumble, Uint16 right_rumble)

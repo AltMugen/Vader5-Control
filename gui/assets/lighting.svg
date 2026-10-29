@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="60 90 600 430" role="img" aria-labelledby="vc-pad-title vc-pad-desc">
+          <title id="vc-pad-title">Предпросмотр подсветки Vader 5 Pro</title><desc id="vc-pad-desc">Упрощённый контур контроллера. Десять RGB-каналов образуют полоску на нижнем торце.</desc>
+          <defs>
+            <linearGradient id="vc-body-shading" x1="0" y1="0" x2="0.4" y2="1"><stop stop-color="#242833"/><stop offset=".55" stop-color="#1b1e26"/><stop offset="1" stop-color="#151922"/></linearGradient>
+            <radialGradient id="vc-stick-shading"><stop stop-color="#353c49"/><stop offset="1" stop-color="#20252f"/></radialGradient>
+            <filter id="led-glow" filterUnits="userSpaceOnUse" x="165" y="350" width="390" height="100"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+          <path class="vc-outline" d="M162 157 Q176 119 232 109 Q247 107 266 120 M454 120 Q473 107 488 109 Q544 119 558 157"/><!-- Rounded grip silhouette, raised centre and bottom recess. -->
+          <path class="vc-outline" style="fill:url(#vc-body-shading)" d="M177 146 Q218 119 267 120 H453 Q502 119 543 146 Q577 174 595 218 Q638 321 646 397 Q653 465 615 490 Q594 496 577 477 L512 402 Q497 378 467 378 H253 Q223 378 208 402 L143 477 Q126 496 105 490 Q67 465 74 397 Q82 321 125 218 Q143 174 177 146 Z"/>
+          <path class="vc-contour" d="M111 236 Q140 174 185 153 L243 132 H477 L535 153 Q580 174 609 236 M85 359 Q84 444 118 470 M635 359 Q636 444 602 470"/>
+          <path class="vc-contour" style="stroke-width:5;opacity:.25" d="M239 136 L360 239 L481 136"/>
+          <g class="vc-input-detail">
+          <!-- Logo/home key is positioned above Select and Start. -->
+          <path d="M337 146 L360 157 L383 146 L370 169 L360 190 L350 169 Z M351 158 L357 161 L357 179 L349 169 Z M369 158 L363 161 L363 179 L371 169 Z" fill="#b4bccb" fill-rule="evenodd"/>
+          <g transform="rotate(42 278 186)"><rect class="vc-key" x="255" y="174" width="46" height="23" rx="11"/><circle cx="278" cy="185" r="4" fill="none" stroke="#8992a2" stroke-width="2"/></g>
+          <g transform="rotate(-42 442 186)"><rect class="vc-key" x="419" y="174" width="46" height="23" rx="11"/><path d="M434 181 H450 M434 186 H450 M434 191 H450" stroke="#8992a2" stroke-width="2"/></g>
+          <!-- Offset sticks and grouped direction keys from the reference. -->
+          <circle cx="205" cy="240" r="43" fill="none" stroke="#9e8655" stroke-width="5" opacity=".7"/><circle cx="205" cy="240" r="34" fill="url(#vc-stick-shading)" stroke="#515a69" stroke-width="2"/><circle cx="205" cy="240" r="18" class="vc-key"/><text x="205" y="240" style="font-size:17px">LS</text>
+          <circle cx="439" cy="326" r="43" fill="none" stroke="#9e8655" stroke-width="5" opacity=".7"/><circle cx="439" cy="326" r="34" fill="url(#vc-stick-shading)" stroke="#515a69" stroke-width="2"/><circle cx="439" cy="326" r="18" class="vc-key"/><text x="439" y="326" style="font-size:17px">RS</text>
+          <circle cx="285" cy="289" r="17" class="vc-key"/><text x="285" y="289">↑</text><circle cx="252" cy="322" r="17" class="vc-key"/><text x="252" y="322">←</text><circle cx="318" cy="322" r="17" class="vc-key"/><text x="318" y="322">→</text><circle cx="285" cy="355" r="17" class="vc-key"/><text x="285" y="355">↓</text>
+          <circle cx="511" cy="218" r="17" class="vc-key"/><text x="511" y="218">Y</text><circle cx="477" cy="254" r="17" class="vc-key"/><text x="477" y="254">X</text><circle cx="548" cy="254" r="17" class="vc-key"/><text x="548" y="254">B</text><circle cx="511" cy="290" r="17" class="vc-key"/><text x="511" y="290">A</text>
+          <circle cx="562" cy="318" r="17" class="vc-key"/><text x="562" y="318">Z</text><circle cx="528" cy="353" r="17" class="vc-key"/><text x="528" y="353">C</text>
+          </g>
+          <!-- Ten logical RGB channels; physical order still needs confirmation. -->
+          <path class="vc-strip-base" d="M187 431 L208 402 Q223 378 253 378 H467 Q497 378 512 402 L533 431"/>
+          <g id="vc-light-bar"><path class="vc-strip" d="M187 431 L208 402 Q213 393 219 388" stroke="#63d8ef"/><path class="vc-strip" d="M219 388 Q233 378 253 378 H263" stroke="#63d8ef"/><path class="vc-strip" d="M263 378 H295" stroke="#63d8ef"/><path class="vc-strip" d="M295 378 H327" stroke="#63d8ef"/><path class="vc-strip" d="M327 378 H360" stroke="#63d8ef"/><path class="vc-strip" d="M360 378 H393" stroke="#63d8ef"/><path class="vc-strip" d="M393 378 H425" stroke="#63d8ef"/><path class="vc-strip" d="M425 378 H457" stroke="#63d8ef"/><path class="vc-strip" d="M457 378 H467 Q487 378 501 388" stroke="#63d8ef"/><path class="vc-strip" d="M501 388 Q507 393 512 402 L533 431" stroke="#63d8ef"/></g>
+          
+        </svg>

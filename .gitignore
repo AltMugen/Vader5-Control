@@ -1,0 +1,10 @@
+/dist/
+__pycache__/
+*.pyc
+
+.agents/
+.codex/
+.claude/
+.cursor/
+.gemini/
+.aws/
